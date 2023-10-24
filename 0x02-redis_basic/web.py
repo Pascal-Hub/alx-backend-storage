@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
-'''A module with tools for request caching and tracking.
-'''
+""" Implement get page function """
 
 import requests
+import redis
 import time
 
-# Dictionary to store URL counts and cached results
-url_cache = {}
+class WebCache:
+    def __init__(self):
+        self._redis = redis.Redis()
 
-def get_page(url: str) -> str:
-    # Check if the URL is cached and still valid (within 10 seconds)
-    if url in url_cache and time.time() - url_cache[url]['timestamp'] < 10:
-        url_cache[url]['count'] += 1
-        return url_cache[url]['content']
+    def get_page(self, url: str) -> str:
+        """ Check if the page is already cached 
+        Fetch the page and store it in the cache"""
+        count_key = f"count:{url}"
+        page_key = f"page:{url}"
 
-    # If the URL is not cached or expired, fetch the content using requests
-    response = requests.get(url)
-    
-    # Simulate slow response using slowwly.robertomurray.co.uk (optional)
-    # time.sleep(5)
+        
+        cached_page = self._redis.get(page_key)
+        if cached_page:
+            self._redis.incr(count_key)
+            return cached_page.decode('utf-8')
 
-    # Store the fetched content in the cache along with the current timestamp and count
-    url_cache[url] = {
-        'content': response.text,
-        'timestamp': time.time(),
-        'count': 1
-    }
-
-    return response.text
+        response = requests.get(url)
+        if response.status_code == 200:
+            page_content = response.text
+            self._redis.setex(page_key, 10, page_content)
+            self._redis.incr(count_key)
+            return page_content
+        else:
+            return f"Error: Unable to fetch the page from {url}"
