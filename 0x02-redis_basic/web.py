@@ -1,55 +1,30 @@
 #!/usr/bin/env python3
-''' Task 5 '''
+'''A module with tools for request caching and tracking.
+'''
 
-
-import redis
 import requests
 import time
-from functools import wraps
 
+# Dictionary to store URL counts and cached results
+url_cache = {}
 
-redis_client = redis.Redis()
-
-
-def track_url_access_count(url):
-    ''' Decorator to track URL access count in Redis.
-    '''
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            redis_client.incr(f"count:{url}")
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-@track_url_access_count("http://slowly.robertomurray.co.uk")
 def get_page(url: str) -> str:
-    ''' get HTML content of a URL and cache it for 10 seconds.
-    '''
-    cache_content = redis_client.get(url)
-    if cache_content:
-        return cache_content.decode("utf-8")
+    # Check if the URL is cached and still valid (within 10 seconds)
+    if url in url_cache and time.time() - url_cache[url]['timestamp'] < 10:
+        url_cache[url]['count'] += 1
+        return url_cache[url]['content']
 
-
+    # If the URL is not cached or expired, fetch the content using requests
     response = requests.get(url)
-    if response.status_code == 200:
-        content = response.text
-        redis_client.setex(url, 10, content)
-        return content
+    
+    # Simulate slow response using slowwly.robertomurray.co.uk (optional)
+    # time.sleep(5)
 
+    # Store the fetched content in the cache along with the current timestamp and count
+    url_cache[url] = {
+        'content': response.text,
+        'timestamp': time.time(),
+        'count': 1
+    }
 
-    return ""
-
-
-if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk"
-    for _ in range(5):
-        content = get_page(url)
-        print(content[:100])
-        time.sleep(1)
-
-
-    access_count = redis_client.get(f"count:{url}")
-    access_count = int(access_count) if access_count is not None else 0
-    print(f"URL accessed {int(access_count)} time.")
+    return response.text
